@@ -76,9 +76,12 @@ const fetchPRContext = createStep({
     const { owner, repo, pullNumber, prTitle, prUrl, prAuthor, baseBranch, headBranch } =
       inputData;
 
+    console.log(`[fetchPRContext] Fetching context for PR #${pullNumber} in ${owner}/${repo}`);
+
     const octokit = getOctokit();
 
     // Fetch PR files
+    console.log("[fetchPRContext] Fetching PR files...");
     const filesResponse = await octokit.rest.pulls.listFiles({
       owner,
       repo,
@@ -93,8 +96,10 @@ const fetchPRContext = createStep({
       deletions: file.deletions,
       changes: file.changes,
     }));
+    console.log(`[fetchPRContext] Found ${files.length} files`);
 
     // Fetch diff
+    console.log("[fetchPRContext] Fetching diff...");
     const diffResponse = await octokit.rest.pulls.get({
       owner,
       repo,
@@ -108,6 +113,7 @@ const fetchPRContext = createStep({
       typeof diffResponse.data === "string"
         ? diffResponse.data
         : JSON.stringify(diffResponse.data);
+    console.log(`[fetchPRContext] Diff length: ${diff.length} characters`);
 
     // Calculate totals
     const totalAdditions = files.reduce((sum, f) => sum + f.additions, 0);
@@ -140,11 +146,16 @@ const performReview = createStep({
     const { owner, repo, pullNumber, prTitle, prUrl, prAuthor, files, diff, totalAdditions, totalDeletions } =
       inputData;
 
+    console.log(`[performReview] Starting review for PR #${pullNumber} in ${owner}/${repo}`);
+    console.log(`[performReview] Files to review: ${files.length}`);
+
     // Get the code review agent
     const agent = mastra?.getAgent("code-review-agent");
     if (!agent) {
+      console.error("[performReview] ERROR: Code review agent not found");
       throw new Error("Code review agent not found");
     }
+    console.log("[performReview] Agent found, generating review...");
 
     // Build the review prompt
     const fileSummary = files
@@ -171,9 +182,19 @@ ${diff}
 Please analyze these changes thoroughly. Use your tools to read the full content of any files you need to understand the context. Provide a comprehensive review following your guidelines.`;
 
     // Generate the review
-    const result = await agent.generate([{ role: "user", content: prompt }]);
+    console.log("[performReview] Calling agent.generate()...");
+    console.log("[performReview] Prompt length:", prompt.length, "characters");
 
-    const reviewContent = result.text;
+    let reviewContent: string;
+    try {
+      // Use generateLegacy for AI SDK v4 compatibility with ollama-ai-provider
+      const result = await agent.generateLegacy([{ role: "user", content: prompt }]);
+      console.log("[performReview] Agent generate completed, result text length:", result.text?.length || 0);
+      reviewContent = result.text;
+    } catch (error) {
+      console.error("[performReview] ERROR during agent.generate():", error);
+      throw error;
+    }
 
     // Determine verdict based on review content
     let verdict: "approved" | "changes_requested" | "commented" = "commented";
@@ -213,6 +234,9 @@ const postReview = createStep({
   execute: async ({ inputData, getInitData }) => {
     const { owner, repo, pullNumber, reviewContent, verdict } = inputData;
 
+    console.log(`[postReview] Posting review to PR #${pullNumber} in ${owner}/${repo}`);
+    console.log(`[postReview] Verdict: ${verdict}, Review length: ${reviewContent?.length || 0}`);
+
     // Get initial data for PR info
     const initData = getInitData() as z.infer<typeof WebhookPayloadSchema>;
     const prUrl = initData?.prUrl || "";
@@ -225,14 +249,14 @@ const postReview = createStep({
     let message = "";
 
     // Post review to GitHub
+    console.log("[postReview] Posting review to GitHub...");
     try {
       await octokit.rest.pulls.createReview({
         owner,
         repo,
         pull_number: pullNumber,
         body: reviewContent,
-        event: verdict === "approved" ? "APPROVE" :
-               verdict === "changes_requested" ? "REQUEST_CHANGES" : "COMMENT",
+        event: verdict === "approved" ? "APPROVE" : "COMMENT",
       });
       reviewPosted = true;
       message = "Review posted to GitHub";

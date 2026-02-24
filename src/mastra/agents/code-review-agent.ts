@@ -1,5 +1,5 @@
 import { Agent } from "@mastra/core/agent";
-import { ollama } from "ollama-ai-provider";
+import { createOllama } from "ollama-ai-provider";
 import {
   getPullRequestFiles,
   getPullRequestDiff,
@@ -121,19 +121,20 @@ When you complete your review, output a structured review in this format:
 
 // Get model configuration from environment
 const getOllamaModel = () => {
-  const modelName = process.env.OLLAMA_MODEL || "codellama:70b";
-  const baseUrl = process.env.OLLAMA_BASE_URL || "http://localhost:11434";
+  const modelName = process.env.OLLAMA_MODEL || "llama3.2-vision:latest";
+  // The ollama-ai-provider expects the base URL to end with /api
+  // OLLAMA_BASE_URL is typically http://host:11434, so we add /api
+  const ollamaBase = process.env.OLLAMA_BASE_URL || "http://localhost:11434";
+  const baseURL = ollamaBase.replace(/\/$/, "") + "/api";
 
-  return ollama(modelName, {
+  console.log(`[Agent] Using Ollama model: ${modelName}`);
+  console.log(`[Agent] Ollama baseURL: ${baseURL}`);
+
+  const ollamaProvider = createOllama({ baseURL });
+  return ollamaProvider(modelName, {
     numCtx: 32768, // Large context window for full file review
-    // Note: baseUrl is set via OLLAMA_HOST environment variable for ollama-ai-provider
   });
 };
-
-// Set OLLAMA_HOST for the ollama-ai-provider
-if (process.env.OLLAMA_BASE_URL) {
-  process.env.OLLAMA_HOST = process.env.OLLAMA_BASE_URL;
-}
 
 // Create the code review agent
 export const codeReviewAgent = new Agent({
