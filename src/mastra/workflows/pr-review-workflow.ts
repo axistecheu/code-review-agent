@@ -225,6 +225,78 @@ Please analyze these changes thoroughly. Use your tools to read the full content
   },
 });
 
+// Helper function to extract syntax and logical errors from review
+function extractIssues(reviewContent: string): { syntaxErrors: string[]; logicalErrors: string[]; criticalIssues: string[] } {
+  const syntaxErrors: string[] = [];
+  const logicalErrors: string[] = [];
+  const criticalIssues: string[] = [];
+
+  const lines = reviewContent.split('\n');
+  let currentSection = '';
+
+  for (const line of lines) {
+    const lowerLine = line.toLowerCase();
+
+    // Detect section headers
+    if (lowerLine.includes('critical') || lowerLine.includes('syntax error') || lowerLine.includes('syntax issue')) {
+      currentSection = 'critical';
+    } else if (lowerLine.includes('logical') || lowerLine.includes('logic error') || lowerLine.includes('bug')) {
+      currentSection = 'logical';
+    } else if (lowerLine.includes('suggestion') || lowerLine.includes('improvement')) {
+      currentSection = 'suggestion';
+    }
+
+    // Extract issues (lines starting with - or * that contain error keywords)
+    const trimmedLine = line.trim();
+    if (trimmedLine.startsWith('-') || trimmedLine.startsWith('*') || trimmedLine.match(/^\d+\./)) {
+      // Check for syntax-related keywords
+      if (lowerLine.includes('syntax') ||
+          lowerLine.includes('undefined') ||
+          lowerLine.includes('null reference') ||
+          lowerLine.includes('type error') ||
+          lowerLine.includes('missing ') ||
+          lowerLine.includes('unexpected') ||
+          lowerLine.includes('unreachable') ||
+          lowerLine.includes('declaration') ||
+          lowerLine.includes('import') && lowerLine.includes('error')) {
+        syntaxErrors.push(trimmedLine.replace(/^[-*\d.]\s*/, ''));
+      }
+      // Check for logical error keywords
+      else if (lowerLine.includes('logic') ||
+               lowerLine.includes('bug') ||
+               lowerLine.includes('incorrect') ||
+               lowerLine.includes('wrong') ||
+               lowerLine.includes('error') ||
+               lowerLine.includes('issue') ||
+               lowerLine.includes('problem') ||
+               lowerLine.includes('fail') ||
+               lowerLine.includes('infinite loop') ||
+               lowerLine.includes('race condition') ||
+               lowerLine.includes('deadlock') ||
+               lowerLine.includes('memory leak') ||
+               lowerLine.includes('off-by-one') ||
+               lowerLine.includes('sql injection') ||
+               lowerLine.includes('security')) {
+        if (currentSection === 'critical') {
+          criticalIssues.push(trimmedLine.replace(/^[-*\d.]\s*/, ''));
+        } else {
+          logicalErrors.push(trimmedLine.replace(/^[-*\d.]\s*/, ''));
+        }
+      }
+      // Critical section items
+      else if (currentSection === 'critical') {
+        criticalIssues.push(trimmedLine.replace(/^[-*\d.]\s*/, ''));
+      }
+    }
+  }
+
+  return {
+    syntaxErrors: [...new Set(syntaxErrors)].slice(0, 5),
+    logicalErrors: [...new Set(logicalErrors)].slice(0, 5),
+    criticalIssues: [...new Set(criticalIssues)].slice(0, 5),
+  };
+}
+
 // Step 3: Post review to GitHub and send notification
 const postReview = createStep({
   id: "post-review",
@@ -272,6 +344,9 @@ const postReview = createStep({
       const chatId = process.env.TELEGRAM_CHAT_ID;
 
       if (botToken && chatId) {
+        // Extract issues for highlighted summary
+        const issues = extractIssues(reviewContent);
+
         const verdictEmoji: Record<string, string> = {
           approved: "✅",
           changes_requested: "⚠️",
@@ -279,16 +354,48 @@ const postReview = createStep({
         };
         const emoji = verdictEmoji[verdict] || "🔍";
 
-        const telegramMessage = `${emoji} *Code Review Complete*
+        // Build focused Telegram message
+        let telegramMessage = `${emoji} *Code Review Complete*
 
 📦 *Repository:* ${repoName}
 📝 *PR:* ${prTitle}
 📊 *Verdict:* ${verdict.replace("_", " ").toUpperCase()}
+`;
 
-*Summary:*
-${reviewContent.slice(0, 500)}${reviewContent.length > 500 ? "..." : ""}
+        // Add critical issues (highest priority)
+        if (issues.criticalIssues.length > 0) {
+          telegramMessage += `\n🔴 *CRITICAL ISSUES:*\n`;
+          for (const issue of issues.criticalIssues) {
+            const escapedIssue = issue.replace(/[*_`\[\]]/g, '\\$&').slice(0, 100);
+            telegramMessage += `• ${escapedIssue}\n`;
+          }
+        }
 
-[View Pull Request](${prUrl})`;
+        // Add syntax errors
+        if (issues.syntaxErrors.length > 0) {
+          telegramMessage += `\n🟠 *SYNTAX ERRORS:*\n`;
+          for (const issue of issues.syntaxErrors) {
+            const escapedIssue = issue.replace(/[*_`\[\]]/g, '\\$&').slice(0, 100);
+            telegramMessage += `• ${escapedIssue}\n`;
+          }
+        }
+
+        // Add logical errors
+        if (issues.logicalErrors.length > 0) {
+          telegramMessage += `\n🟡 *LOGICAL ERRORS:*\n`;
+          for (const issue of issues.logicalErrors) {
+            const escapedIssue = issue.replace(/[*_`\[\]]/g, '\\$&').slice(0, 100);
+            telegramMessage += `• ${escapedIssue}\n`;
+          }
+        }
+
+        // If no specific issues found, show brief summary
+        if (issues.criticalIssues.length === 0 && issues.syntaxErrors.length === 0 && issues.logicalErrors.length === 0) {
+          const briefSummary = reviewContent.replace(/[#*`\[\]]/g, '').slice(0, 300);
+          telegramMessage += `\n📋 *Summary:*\n${briefSummary}...`;
+        }
+
+        telegramMessage += `\n\n[View Full Review](${prUrl})`;
 
         const response = await fetch(
           `https://api.telegram.org/bot${botToken}/sendMessage`,
