@@ -3,8 +3,7 @@ import dotenv from "dotenv";
 dotenv.config();
 
 import express from "express";
-import type { Request, Response, NextFunction } from "express";
-import cors from "cors";
+import { MastraServer } from "@mastra/express";
 import crypto from "crypto";
 import { mastra } from "./mastra/index.js";
 import { WebhookPayloadSchema } from "./mastra/workflows/pr-review-workflow.js";
@@ -13,8 +12,10 @@ const app = express();
 const PORT = process.env.PORT || 4111;
 const GITHUB_WEBHOOK_SECRET = process.env.GITHUB_WEBHOOK_SECRET || "";
 
-// Middleware
-app.use(cors());
+// Create Mastra server adapter
+const server = new MastraServer({ app, mastra });
+
+// Add raw body for webhook signature verification
 app.use(
   express.json({
     verify: (req: any, _res: any, buf: Buffer) => {
@@ -47,12 +48,12 @@ function verifyGitHubSignature(req: any): boolean {
   );
 }
 
-// Health check endpoint
+// Health check endpoint (before Mastra init for quick access)
 app.get("/health", (_req: any, res: any) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
-// GitHub webhook endpoint
+// GitHub webhook endpoint (before Mastra init - doesn't need Mastra context)
 app.post("/webhook/github", async (req: any, res: any) => {
   try {
     // Verify signature
@@ -118,7 +119,7 @@ app.post("/webhook/github", async (req: any, res: any) => {
       }
 
       // Create and start workflow run
-      const run = await workflow.createRunAsync();
+      const run = await workflow.createRun();
       const result = await run.start({ inputData: validatedInput });
 
       if (result.status === "success") {
@@ -161,7 +162,7 @@ app.post("/webhook/github", async (req: any, res: any) => {
   }
 });
 
-// Manual trigger endpoint for testing
+// Manual trigger endpoint (before Mastra init - uses mastra directly)
 app.post("/trigger-review", async (req: any, res: any) => {
   try {
     const { owner, repo, pullNumber } = req.body;
@@ -221,7 +222,7 @@ app.post("/trigger-review", async (req: any, res: any) => {
       throw new Error("PR review workflow not found");
     }
 
-    const run = await workflow.createRunAsync();
+    const run = await workflow.createRun();
     const result = await run.start({ inputData: validatedInput });
 
     if (result.status === "success") {
@@ -250,15 +251,13 @@ app.post("/trigger-review", async (req: any, res: any) => {
   }
 });
 
-// Error handling middleware
-app.use((err: Error, _req: any, res: any, _next: any) => {
-  console.error("Unhandled error:", err);
-  res.status(500).json({ error: "Internal server error" });
-});
+// Initialize Mastra server (registers all Mastra routes and middleware)
+await server.init();
 
 // Start server
 app.listen(PORT, () => {
   console.log(`Code Review Agent server running on port ${PORT}`);
+  console.log(`Mastra API endpoints available at /api/*`);
   console.log(`Webhook endpoint: http://localhost:${PORT}/webhook/github`);
   console.log(`Manual trigger: POST http://localhost:${PORT}/trigger-review`);
   console.log(`Health check: http://localhost:${PORT}/health`);
