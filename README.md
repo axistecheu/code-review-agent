@@ -51,6 +51,9 @@ code-review-agent/
 │           ├── github-tools.ts       # GitHub API tools (Octokit)
 │           ├── file-tools.ts         # Full file access via GitHub API
 │           └── telegram-tools.ts     # Telegram notifications
+├── Dockerfile                        # Docker image definition
+├── docker-compose.yml                # Docker Compose configuration
+├── .dockerignore                     # Docker build exclusions
 ├── package.json
 ├── tsconfig.json
 └── .env.example
@@ -292,6 +295,123 @@ This evaluates the agent's ability to detect:
 | Best Practices | 0.89 |
 | **Average** | **0.94** |
 
+## Docker Deployment
+
+Deploy the Code Review Agent using Docker and Docker Compose.
+
+### Quick Start
+
+1. **Configure environment variables:**
+
+```bash
+cp .env.example .env
+# Edit .env with your credentials
+```
+
+2. **Build and run with Docker Compose:**
+
+```bash
+docker compose up -d
+```
+
+3. **Check logs:**
+
+```bash
+docker compose logs -f
+```
+
+### Docker Commands
+
+```bash
+# Build the image
+docker compose build
+
+# Start in background
+docker compose up -d
+
+# Stop the service
+docker compose down
+
+# View logs
+docker compose logs -f
+
+# Restart the service
+docker compose restart
+```
+
+### Configuration
+
+The Docker Compose setup uses these environment variables from your `.env` file:
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `OLLAMA_BASE_URL` | Ollama server URL | `http://host.docker.internal:11434` |
+| `OLLAMA_MODEL` | Model to use | `qwen3:8b` |
+| `GITHUB_TOKEN` | GitHub PAT | Required |
+| `GITHUB_WEBHOOK_SECRET` | Webhook secret | Required |
+| `TELEGRAM_BOT_TOKEN` | Telegram bot token | Optional |
+| `TELEGRAM_CHAT_ID` | Telegram chat ID | Optional |
+| `PORT` | Server port | `4111` |
+
+### Connecting to Ollama
+
+**Option 1: Ollama on Host Machine (Default)**
+
+The default configuration uses `host.docker.internal` to connect to Ollama running on your host machine:
+
+```yaml
+OLLAMA_BASE_URL=http://host.docker.internal:11434
+```
+
+**Option 2: Ollama in Docker**
+
+Uncomment the `ollama` service in `docker-compose.yml` to run Ollama alongside the agent:
+
+```yaml
+services:
+  code-review-agent:
+    # ...
+    environment:
+      - OLLAMA_BASE_URL=http://ollama:11434
+
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+```
+
+### Health Check
+
+The container includes a health check that verifies the `/health` endpoint:
+
+```bash
+# Check container health
+docker compose ps
+```
+
+### Production Deployment
+
+For production deployments:
+
+1. **Use a reverse proxy** (nginx, Traefik) with SSL
+2. **Set up proper logging** (ELK stack, CloudWatch, etc.)
+3. **Configure resource limits** in docker-compose.yml:
+
+```yaml
+services:
+  code-review-agent:
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '1'
+          memory: 1G
+```
+
 ## Deploying to Mastra Cloud
 
 Mastra Cloud provides managed hosting for your agents.
@@ -411,6 +531,16 @@ Receives GitHub webhook events. Automatically processes PR events:
 | `npm run test` | Run tests |
 | `npm run test:tools` | Test tools individually |
 | `npm run eval` | Run evaluation system |
+
+### Docker Commands
+
+| Command | Description |
+|---------|-------------|
+| `docker compose up -d` | Start container in background |
+| `docker compose down` | Stop and remove container |
+| `docker compose logs -f` | View container logs |
+| `docker compose build` | Rebuild the image |
+| `docker compose restart` | Restart the container |
 
 ## License
 
