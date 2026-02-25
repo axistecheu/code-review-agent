@@ -226,76 +226,247 @@ Please analyze these changes thoroughly. Use your tools to read the full content
   },
 });
 
-// Helper function to extract syntax and logical errors from review
-function extractIssues(reviewContent: string): { syntaxErrors: string[]; logicalErrors: string[]; criticalIssues: string[] } {
-  const syntaxErrors: string[] = [];
-  const logicalErrors: string[] = [];
-  const criticalIssues: string[] = [];
+// Helper function to extract issues from review with better categorization
+function extractIssues(reviewContent: string): {
+  syntaxErrors: Array<{ file?: string; line?: string; message: string }>;
+  criticalIssues: Array<{ file?: string; line?: string; message: string }>;
+  warnings: Array<{ file?: string; line?: string; message: string }>;
+  suggestions: string[];
+  positiveNotes: string[];
+} {
+  const syntaxErrors: Array<{ file?: string; line?: string; message: string }> = [];
+  const criticalIssues: Array<{ file?: string; line?: string; message: string }> = [];
+  const warnings: Array<{ file?: string; line?: string; message: string }> = [];
+  const suggestions: string[] = [];
+  const positiveNotes: string[] = [];
 
   const lines = reviewContent.split('\n');
   let currentSection = '';
 
+  // Parse file:line references
+  const parseFileRef = (line: string): { file?: string; line?: string; message: string } => {
+    const fileLineMatch = line.match(/\[?([^\s\]:]+):(\d+)\]?:?\s*(.+)/);
+    if (fileLineMatch) {
+      return {
+        file: fileLineMatch[1],
+        line: fileLineMatch[2],
+        message: fileLineMatch[3] || line,
+      };
+    }
+    const fileMatch = line.match(/\[?([^\s\]:]+)\]?:?\s*(.+)/);
+    if (fileMatch && fileMatch[1].includes('.')) {
+      return {
+        file: fileMatch[1],
+        message: fileMatch[2] || line,
+      };
+    }
+    return { message: line };
+  };
+
   for (const line of lines) {
     const lowerLine = line.toLowerCase();
+    const trimmedLine = line.trim();
 
     // Detect section headers
-    if (lowerLine.includes('critical') || lowerLine.includes('syntax error') || lowerLine.includes('syntax issue')) {
+    if (lowerLine.includes('syntax error') || lowerLine.includes('syntax issue') || lowerLine.includes('blocking')) {
+      currentSection = 'syntax';
+    } else if (lowerLine.includes('critical issue') || lowerLine.includes('other critical')) {
       currentSection = 'critical';
-    } else if (lowerLine.includes('logical') || lowerLine.includes('logic error') || lowerLine.includes('bug')) {
-      currentSection = 'logical';
+    } else if (lowerLine.includes('security') || lowerLine.includes('vulnerability')) {
+      currentSection = 'critical';
     } else if (lowerLine.includes('suggestion') || lowerLine.includes('improvement')) {
       currentSection = 'suggestion';
+    } else if (lowerLine.includes('positive') || lowerLine.includes('good') || lowerLine.includes('nice')) {
+      currentSection = 'positive';
+    } else if (lowerLine.includes('warning') || lowerLine.includes('caution')) {
+      currentSection = 'warning';
     }
 
-    // Extract issues (lines starting with - or * that contain error keywords)
-    const trimmedLine = line.trim();
+    // Skip empty lines and headers
+    if (!trimmedLine || trimmedLine.startsWith('#') || trimmedLine.startsWith('```')) {
+      continue;
+    }
+
+    // Extract issues from bullet points
     if (trimmedLine.startsWith('-') || trimmedLine.startsWith('*') || trimmedLine.match(/^\d+\./)) {
-      // Check for syntax-related keywords
-      if (lowerLine.includes('syntax') ||
-          lowerLine.includes('undefined') ||
-          lowerLine.includes('null reference') ||
-          lowerLine.includes('type error') ||
-          lowerLine.includes('missing ') ||
-          lowerLine.includes('unexpected') ||
-          lowerLine.includes('unreachable') ||
-          lowerLine.includes('declaration') ||
-          lowerLine.includes('import') && lowerLine.includes('error')) {
-        syntaxErrors.push(trimmedLine.replace(/^[-*\d.]\s*/, ''));
-      }
-      // Check for logical error keywords
-      else if (lowerLine.includes('logic') ||
-               lowerLine.includes('bug') ||
-               lowerLine.includes('incorrect') ||
-               lowerLine.includes('wrong') ||
-               lowerLine.includes('error') ||
-               lowerLine.includes('issue') ||
-               lowerLine.includes('problem') ||
-               lowerLine.includes('fail') ||
-               lowerLine.includes('infinite loop') ||
-               lowerLine.includes('race condition') ||
-               lowerLine.includes('deadlock') ||
-               lowerLine.includes('memory leak') ||
-               lowerLine.includes('off-by-one') ||
-               lowerLine.includes('sql injection') ||
-               lowerLine.includes('security')) {
-        if (currentSection === 'critical') {
-          criticalIssues.push(trimmedLine.replace(/^[-*\d.]\s*/, ''));
-        } else {
-          logicalErrors.push(trimmedLine.replace(/^[-*\d.]\s*/, ''));
+      const cleanMessage = trimmedLine.replace(/^[-*\d.]\s*/, '');
+
+      if (currentSection === 'syntax') {
+        syntaxErrors.push(parseFileRef(cleanMessage));
+      } else if (currentSection === 'critical') {
+        criticalIssues.push(parseFileRef(cleanMessage));
+      } else if (currentSection === 'warning') {
+        warnings.push(parseFileRef(cleanMessage));
+      } else if (currentSection === 'suggestion') {
+        suggestions.push(cleanMessage);
+      } else if (currentSection === 'positive') {
+        positiveNotes.push(cleanMessage);
+      } else {
+        // Auto-categorize based on keywords
+        if (lowerLine.includes('syntax') || lowerLine.includes('missing ') ||
+            lowerLine.includes('unexpected') || lowerLine.includes('undeclared')) {
+          syntaxErrors.push(parseFileRef(cleanMessage));
+        } else if (lowerLine.includes('security') || lowerLine.includes('vulnerability') ||
+                   lowerLine.includes('injection') || lowerLine.includes('xss') ||
+                   lowerLine.includes('critical') || lowerLine.includes('must fix')) {
+          criticalIssues.push(parseFileRef(cleanMessage));
+        } else if (lowerLine.includes('bug') || lowerLine.includes('error') ||
+                   lowerLine.includes('incorrect') || lowerLine.includes('wrong') ||
+                   lowerLine.includes('memory leak') || lowerLine.includes('crash')) {
+          warnings.push(parseFileRef(cleanMessage));
+        } else if (lowerLine.includes('consider') || lowerLine.includes('could') ||
+                   lowerLine.includes('should') || lowerLine.includes('might')) {
+          suggestions.push(cleanMessage);
         }
-      }
-      // Critical section items
-      else if (currentSection === 'critical') {
-        criticalIssues.push(trimmedLine.replace(/^[-*\d.]\s*/, ''));
       }
     }
   }
 
   return {
-    syntaxErrors: [...new Set(syntaxErrors)].slice(0, 5),
-    logicalErrors: [...new Set(logicalErrors)].slice(0, 5),
-    criticalIssues: [...new Set(criticalIssues)].slice(0, 5),
+    syntaxErrors: syntaxErrors.slice(0, 4),
+    criticalIssues: criticalIssues.slice(0, 4),
+    warnings: warnings.slice(0, 4),
+    suggestions: suggestions.slice(0, 3),
+    positiveNotes: positiveNotes.slice(0, 2),
   };
+}
+
+// Helper to escape HTML special characters
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+// Format issue with file reference
+function formatIssueHtml(issue: { file?: string; line?: string; message: string }): string {
+  let formatted = escapeHtml(issue.message);
+  if (issue.file) {
+    const location = issue.line ? `${issue.file}:${issue.line}` : issue.file;
+    formatted = `<code>${escapeHtml(location)}</code> ${formatted}`;
+  }
+  return formatted;
+}
+
+// Build modern Telegram notification
+function buildTelegramNotification(params: {
+  repoName: string;
+  prTitle: string;
+  prUrl: string;
+  prAuthor: string;
+  headBranch: string;
+  baseBranch: string;
+  filesCount: number;
+  additions: number;
+  deletions: number;
+  verdict: string;
+  issues: ReturnType<typeof extractIssues>;
+  reviewLength: number;
+}): string {
+  const {
+    repoName,
+    prTitle,
+    prUrl,
+    prAuthor,
+    headBranch,
+    baseBranch,
+    filesCount,
+    additions,
+    deletions,
+    verdict,
+    issues,
+  } = params;
+
+  // Verdict styling
+  const verdictConfig: Record<string, { emoji: string; label: string; color: string }> = {
+    approved: { emoji: '✅', label: 'APPROVED', color: '🟢' },
+    changes_requested: { emoji: '⚠️', label: 'CHANGES REQUESTED', color: '🔴' },
+    commented: { emoji: '💬', label: 'REVIEWED', color: '🟡' },
+  };
+  const { emoji: verdictEmoji, label: verdictLabel, color: statusColor } = verdictConfig[verdict] || verdictConfig.commented;
+
+  // Count issues
+  const totalIssues = issues.syntaxErrors.length + issues.criticalIssues.length + issues.warnings.length;
+
+  // Build message parts
+  const parts: string[] = [];
+
+  // Header
+  parts.push(`<b>🤖 AI Code Review</b>`);
+  parts.push(`<pre language="plain">${statusColor} ${verdictLabel}</pre>`);
+  parts.push('');
+
+  // PR Info
+  parts.push(`<b>📝 Pull Request</b>`);
+  parts.push(`<a href="${prUrl}">${escapeHtml(prTitle)}</a>`);
+  parts.push('');
+
+  // Meta info
+  parts.push(`<b>📦 Repository:</b> <code>${escapeHtml(repoName)}</code>`);
+  parts.push(`<b>👤 Author:</b> ${escapeHtml(prAuthor)}`);
+  parts.push(`<b>🔀 Branch:</b> <code>${escapeHtml(headBranch)}</code> → <code>${escapeHtml(baseBranch)}</code>`);
+  parts.push('');
+
+  // Stats (using emojis for visual distinction since Telegram HTML doesn't support font colors)
+  const statsLine = `<b>📊 Changes:</b> ${filesCount} files  🟢+${additions}  🔴-${deletions}`;
+  parts.push(statsLine);
+  parts.push('');
+
+  // Issues section
+  if (totalIssues > 0) {
+    parts.push(`<b>🔍 Findings</b> (${totalIssues} issues)`);
+    parts.push('<blockquote>');
+
+    // Syntax errors (highest priority)
+    if (issues.syntaxErrors.length > 0) {
+      parts.push(`<b>🚨 Syntax Errors</b> <i>(blocking)</i>`);
+      for (const issue of issues.syntaxErrors) {
+        parts.push(`  ⛔ ${formatIssueHtml(issue)}`);
+      }
+      parts.push('');
+    }
+
+    // Critical issues
+    if (issues.criticalIssues.length > 0) {
+      parts.push(`<b>🔴 Critical Issues</b>`);
+      for (const issue of issues.criticalIssues) {
+        parts.push(`  🔸 ${formatIssueHtml(issue)}`);
+      }
+      parts.push('');
+    }
+
+    // Warnings
+    if (issues.warnings.length > 0) {
+      parts.push(`<b>🟡 Warnings</b>`);
+      for (const issue of issues.warnings) {
+        parts.push(`  ⚡ ${formatIssueHtml(issue)}`);
+      }
+    }
+
+    parts.push('</blockquote>');
+    parts.push('');
+  }
+
+  // Suggestions
+  if (issues.suggestions.length > 0) {
+    parts.push(`<b>💡 Suggestions</b>`);
+    for (const suggestion of issues.suggestions.slice(0, 2)) {
+      parts.push(`  • ${escapeHtml(suggestion)}`);
+    }
+    parts.push('');
+  }
+
+  // Positive notes
+  if (issues.positiveNotes.length > 0) {
+    parts.push(`<b>✨ Good Practices</b>`);
+    for (const note of issues.positiveNotes) {
+      parts.push(`  ✓ ${escapeHtml(note)}`);
+    }
+    parts.push('');
+  }
+
+  return parts.join('\n');
 }
 
 // Step 3: Post review to GitHub and send notification
@@ -314,12 +485,33 @@ const postReview = createStep({
     const initData = getInitData() as z.infer<typeof WebhookPayloadSchema>;
     const prUrl = initData?.prUrl || "";
     const prTitle = initData?.prTitle || "";
+    const prAuthor = initData?.prAuthor || "Unknown";
+    const headBranch = initData?.headBranch || "unknown";
+    const baseBranch = initData?.baseBranch || "main";
     const repoName = `${owner}/${repo}`;
 
     const octokit = getOctokit();
     let reviewPosted = false;
     let notificationSent = false;
     let message = "";
+
+    // Get PR stats for notification
+    let filesCount = 0;
+    let additions = 0;
+    let deletions = 0;
+    try {
+      const prFiles = await octokit.rest.pulls.listFiles({
+        owner,
+        repo,
+        pull_number: pullNumber,
+        per_page: 100,
+      });
+      filesCount = prFiles.data.length;
+      additions = prFiles.data.reduce((sum, f) => sum + f.additions, 0);
+      deletions = prFiles.data.reduce((sum, f) => sum + f.deletions, 0);
+    } catch {
+      console.log("[postReview] Could not fetch PR stats");
+    }
 
     // Post review to GitHub
     console.log("[postReview] Posting review to GitHub...");
@@ -345,58 +537,24 @@ const postReview = createStep({
       const chatId = process.env.TELEGRAM_CHAT_ID;
 
       if (botToken && chatId) {
-        // Extract issues for highlighted summary
+        // Extract issues for summary
         const issues = extractIssues(reviewContent);
 
-        const verdictEmoji: Record<string, string> = {
-          approved: "✅",
-          changes_requested: "⚠️",
-          commented: "💬",
-        };
-        const emoji = verdictEmoji[verdict] || "🔍";
-
-        // Build focused Telegram message
-        let telegramMessage = `${emoji} *Code Review Complete*
-
-📦 *Repository:* ${repoName}
-📝 *PR:* ${prTitle}
-📊 *Verdict:* ${verdict.replace("_", " ").toUpperCase()}
-`;
-
-        // Add critical issues (highest priority)
-        if (issues.criticalIssues.length > 0) {
-          telegramMessage += `\n🔴 *CRITICAL ISSUES:*\n`;
-          for (const issue of issues.criticalIssues) {
-            const escapedIssue = issue.replace(/[*_`\[\]]/g, '\\$&').slice(0, 100);
-            telegramMessage += `• ${escapedIssue}\n`;
-          }
-        }
-
-        // Add syntax errors
-        if (issues.syntaxErrors.length > 0) {
-          telegramMessage += `\n🟠 *SYNTAX ERRORS:*\n`;
-          for (const issue of issues.syntaxErrors) {
-            const escapedIssue = issue.replace(/[*_`\[\]]/g, '\\$&').slice(0, 100);
-            telegramMessage += `• ${escapedIssue}\n`;
-          }
-        }
-
-        // Add logical errors
-        if (issues.logicalErrors.length > 0) {
-          telegramMessage += `\n🟡 *LOGICAL ERRORS:*\n`;
-          for (const issue of issues.logicalErrors) {
-            const escapedIssue = issue.replace(/[*_`\[\]]/g, '\\$&').slice(0, 100);
-            telegramMessage += `• ${escapedIssue}\n`;
-          }
-        }
-
-        // If no specific issues found, show brief summary
-        if (issues.criticalIssues.length === 0 && issues.syntaxErrors.length === 0 && issues.logicalErrors.length === 0) {
-          const briefSummary = reviewContent.replace(/[#*`\[\]]/g, '').slice(0, 300);
-          telegramMessage += `\n📋 *Summary:*\n${briefSummary}...`;
-        }
-
-        telegramMessage += `\n\n[View Full Review](${prUrl})`;
+        // Build modern notification
+        const telegramMessage = buildTelegramNotification({
+          repoName,
+          prTitle,
+          prUrl,
+          prAuthor,
+          headBranch,
+          baseBranch,
+          filesCount,
+          additions,
+          deletions,
+          verdict,
+          issues,
+          reviewLength: reviewContent?.length || 0,
+        });
 
         const response = await fetch(
           `https://api.telegram.org/bot${botToken}/sendMessage`,
@@ -408,14 +566,27 @@ const postReview = createStep({
             body: JSON.stringify({
               chat_id: chatId,
               text: telegramMessage,
-              parse_mode: "Markdown",
+              parse_mode: "HTML",
               disable_web_page_preview: true,
+              reply_markup: {
+                inline_keyboard: [
+                  [
+                    {
+                      text: "🔍 View Full Review on GitHub",
+                      url: prUrl,
+                    },
+                  ],
+                ],
+              },
             }),
           }
         );
 
-        const data = (await response.json()) as { ok: boolean };
+        const data = (await response.json()) as { ok: boolean; description?: string };
         notificationSent = data.ok;
+        if (!data.ok) {
+          console.error("[postReview] Telegram error:", data.description);
+        }
       }
     } catch (error) {
       console.error("Failed to send Telegram notification:", error);

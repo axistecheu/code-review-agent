@@ -27,25 +27,45 @@ app.use(
 // Verify GitHub webhook signature
 function verifyGitHubSignature(req: any): boolean {
   if (!GITHUB_WEBHOOK_SECRET) {
-    console.warn("WARNING: GITHUB_WEBHOOK_SECRET not set, skipping signature verification");
+    console.warn("[Webhook] WARNING: GITHUB_WEBHOOK_SECRET not set, skipping signature verification");
     return true;
   }
 
   const signature = req.headers["x-hub-signature-256"] as string;
+  console.log("[Webhook] Signature header:", signature ? "present" : "missing");
+
   if (!signature) {
+    console.error("[Webhook] No signature header found");
     return false;
   }
 
   const payload = req.rawBody;
+  console.log("[Webhook] Raw body length:", payload?.length || 0);
+
+  if (!payload) {
+    console.error("[Webhook] No raw body found - verify middleware order");
+    return false;
+  }
+
   const expectedSignature = `sha256=${crypto
     .createHmac("sha256", GITHUB_WEBHOOK_SECRET)
     .update(payload)
     .digest("hex")}`;
 
-  return crypto.timingSafeEqual(
-    Buffer.from(signature),
-    Buffer.from(expectedSignature)
-  );
+  console.log("[Webhook] Expected signature:", expectedSignature.substring(0, 20) + "...");
+  console.log("[Webhook] Received signature:", signature.substring(0, 20) + "...");
+
+  try {
+    const isValid = crypto.timingSafeEqual(
+      Buffer.from(signature),
+      Buffer.from(expectedSignature)
+    );
+    console.log("[Webhook] Signature valid:", isValid);
+    return isValid;
+  } catch (error) {
+    console.error("[Webhook] Signature comparison error:", error);
+    return false;
+  }
 }
 
 // Health check endpoint (before Mastra init for quick access)
@@ -55,21 +75,26 @@ app.get("/health", (_req: any, res: any) => {
 
 // GitHub webhook endpoint (before Mastra init - doesn't need Mastra context)
 app.post("/webhook/github", async (req: any, res: any) => {
+  console.log("[Webhook] ===== Received GitHub webhook =====");
+  console.log("[Webhook] Headers:", JSON.stringify(req.headers, null, 2));
+
   try {
     // Verify signature
     if (!verifyGitHubSignature(req)) {
-      console.error("Invalid webhook signature");
+      console.error("[Webhook] Invalid signature - rejecting request");
       res.status(401).json({ error: "Invalid signature" });
       return;
     }
+    console.log("[Webhook] Signature verified successfully");
 
     const event = req.headers["x-github-event"] as string;
     const payload = req.body;
 
-    console.log(`Received GitHub event: ${event}`);
+    console.log(`[Webhook] Event type: ${event}`);
 
     // Handle ping event
     if (event === "ping") {
+      console.log("[Webhook] Ping received - responding with pong");
       res.json({ message: "pong" });
       return;
     }
@@ -77,11 +102,12 @@ app.post("/webhook/github", async (req: any, res: any) => {
     // Handle pull request events
     if (event === "pull_request") {
       const action = payload.action;
+      console.log(`[Webhook] PR action: ${action}`);
 
       // Only process relevant PR actions
       const relevantActions = ["opened", "synchronize", "reopened"];
       if (!relevantActions.includes(action)) {
-        console.log(`Ignoring PR action: ${action}`);
+        console.log(`[Webhook] Ignoring PR action: ${action}`);
         res.json({ message: `Action ${action} ignored` });
         return;
       }
@@ -92,9 +118,7 @@ app.post("/webhook/github", async (req: any, res: any) => {
       const repo = payload.repository.name;
       const pullNumber = pr.number;
 
-      console.log(
-        `Processing PR #${pullNumber} in ${owner}/${repo}: ${pr.title}`
-      );
+      console.log(`[Webhook] Processing PR #${pullNumber} in ${owner}/${repo}: ${pr.title}`);
 
       // Prepare workflow input
       const workflowInput = {
@@ -109,33 +133,42 @@ app.post("/webhook/github", async (req: any, res: any) => {
         action,
       };
 
+      console.log("[Webhook] Workflow input:", JSON.stringify(workflowInput, null, 2));
+
       // Validate input
       const validatedInput = WebhookPayloadSchema.parse(workflowInput);
+      console.log("[Webhook] Input validated successfully");
 
       // Start the workflow
+      console.log("[Webhook] Getting workflow: pr-review-workflow");
       const workflow = mastra.getWorkflow("pr-review-workflow");
       if (!workflow) {
+        console.error("[Webhook] ERROR: PR review workflow not found");
         throw new Error("PR review workflow not found");
       }
+      console.log("[Webhook] Workflow found, creating run...");
 
       // Create and start workflow run
       const run = await workflow.createRun();
+      console.log("[Webhook] Run created, starting with input data...");
+
       const result = await run.start({ inputData: validatedInput });
+      console.log("[Webhook] Workflow result status:", result.status);
 
       if (result.status === "success") {
-        console.log("Workflow completed successfully:", result.result);
+        console.log("[Webhook] Workflow completed successfully");
         res.json({
           message: "Review workflow completed",
           result: result.result,
         });
       } else if (result.status === "suspended") {
-        console.log("Workflow suspended:", result.suspended);
+        console.log("[Webhook] Workflow suspended:", result.suspended);
         res.json({
           message: "Review workflow suspended",
           suspended: result.suspended,
         });
       } else if (result.status === "failed") {
-        console.error("Workflow failed:", result.error);
+        console.error("[Webhook] Workflow failed:", result.error);
         res.status(500).json({
           error: "Workflow failed",
           details: result.error?.message || "Unknown error",
@@ -143,6 +176,7 @@ app.post("/webhook/github", async (req: any, res: any) => {
       } else {
         // Handle tripwire status
         const tripwireResult = result as { status: string; tripwire?: { reason?: string } };
+        console.error("[Webhook] Workflow terminated:", tripwireResult.status);
         res.status(500).json({
           error: "Workflow terminated",
           status: tripwireResult.status,
@@ -153,9 +187,10 @@ app.post("/webhook/github", async (req: any, res: any) => {
     }
 
     // Ignore other events
+    console.log(`[Webhook] Event ${event} not handled`);
     res.json({ message: `Event ${event} not handled` });
   } catch (error) {
-    console.error("Error processing webhook:", error);
+    console.error("[Webhook] ERROR processing webhook:", error);
     const errorMessage =
       error instanceof Error ? error.message : "Unknown error";
     res.status(500).json({ error: errorMessage });

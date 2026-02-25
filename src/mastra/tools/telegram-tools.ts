@@ -23,8 +23,8 @@ export const sendReviewNotification = createTool({
     messageId: z.number().optional(),
     message: z.string(),
   }),
-  execute: async ({ context }) => {
-    const { reviewSummary, prUrl, prTitle, repoName, verdict } = context;
+  execute: async (inputData) => {
+    const { reviewSummary, prUrl, prTitle, repoName, verdict } = inputData;
     const botToken = process.env.TELEGRAM_BOT_TOKEN;
     const chatId = process.env.TELEGRAM_CHAT_ID;
 

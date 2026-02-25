@@ -5,10 +5,12 @@ An AI-powered code review agent built with the [Mastra](https://mastra.ai) frame
 ## Key Features
 
 - **Full File Context** - Unlike traditional diff-only reviews, this agent can read complete files via GitHub API to understand the broader codebase context
+- **Enhanced Syntax Detection** - Prioritizes syntax errors as blocking issues before reviewing logic or best practices
 - **Local LLM Support** - Uses Ollama for privacy and zero API costs
 - **GitHub Integration** - Automatically posts reviews as PR comments
-- **Telegram Notifications** - Optional notifications for review summaries
+- **Modern Telegram Notifications** - Rich formatted notifications with inline buttons and issue categorization
 - **Webhook Support** - Real-time triggers on PR events
+- **Evaluation System** - Built-in evaluation to measure review quality
 
 ## Architecture
 
@@ -36,6 +38,8 @@ An AI-powered code review agent built with the [Mastra](https://mastra.ai) frame
 code-review-agent/
 ├── src/
 │   ├── index.ts                      # Express webhook server entry point
+│   ├── evals/
+│   │   └── code-review-eval.ts       # Evaluation system for review quality
 │   └── mastra/
 │       ├── index.ts                  # Mastra configuration
 │       ├── agents/
@@ -65,6 +69,16 @@ The main agent that performs comprehensive code reviews.
 - Identifies security vulnerabilities, performance issues, and code quality problems
 
 **Review Checklist:**
+
+**Syntax Errors (CRITICAL - Checked First):**
+- Braces & brackets balance
+- Semicolons (especially in for loops)
+- Comma separation in objects/arrays
+- Parentheses wrapping for conditions
+- String quote matching
+- Operator/keyword validation
+
+**Other Categories:**
 - **Security**: SQL injection, XSS, CSRF, authentication issues, sensitive data exposure
 - **Code Quality**: DRY principle, complexity, naming conventions, error handling
 - **Performance**: N+1 queries, memory leaks, inefficient algorithms
@@ -96,7 +110,7 @@ These tools give the agent access to full file content, not just diffs:
 
 | Tool | Description |
 |------|-------------|
-| `sendReviewNotification` | Send review summary to Telegram with verdict |
+| `sendReviewNotification` | Send modern formatted review summary with inline buttons |
 
 ## Workflow
 
@@ -105,6 +119,42 @@ The PR Review Workflow (`pr-review-workflow`) has 3 steps:
 1. **fetchPRContext** - Fetch PR files, diff, and metadata from GitHub
 2. **performReview** - Use the code review agent to analyze the changes
 3. **postReview** - Post review to GitHub and send Telegram notification
+
+## Telegram Notification Format
+
+The agent sends rich, developer-friendly notifications:
+
+```
+🤖 AI Code Review
+🔴 CHANGES REQUESTED
+
+📝 Pull Request
+Fix syntax errors in utility functions (clickable)
+
+📦 Repository: owner/repo
+👤 Author: username
+🔀 Branch: feature-branch → main
+
+📊 Changes: 3 files  🟢+45  🔴-12
+
+🔍 Findings (4 issues)
+┌──────────────────────────────────────
+│ 🚨 Syntax Errors (blocking)
+│   ⛔ utils/parser.js:15 Missing closing parenthesis
+│   ⛔ utils/parser.js:23 Missing semicolon
+│
+│ 🟡 Warnings
+│   ⚡ utils/parser.js:45 Potential null reference
+└──────────────────────────────────────
+
+💡 Suggestions
+  • Consider using const instead of let
+
+✨ Good Practices
+  ✓ Clean function separation
+
+[🔍 View Full Review on GitHub]  ← Inline button
+```
 
 ## Prerequisites
 
@@ -217,6 +267,31 @@ ngrok http 4111
 - Secret: Same as `GITHUB_WEBHOOK_SECRET` in .env
 - Events: Select "Pull requests"
 
+## Evaluation System
+
+Test the quality of code reviews using the built-in evaluation system:
+
+```bash
+npm run eval
+```
+
+This evaluates the agent's ability to detect:
+- Import Errors
+- Syntax Errors
+- Logical Errors
+- Memory Leaks/Crashes
+- Best Practices Violations
+
+**Recent Evaluation Results:**
+| Category | Score |
+|----------|-------|
+| Import Errors | 1.00 |
+| Syntax Errors | 0.80 |
+| Logical Errors | 1.00 |
+| Memory Leaks/Crashes | 1.00 |
+| Best Practices | 0.89 |
+| **Average** | **0.94** |
+
 ## Deploying to Mastra Cloud
 
 Mastra Cloud provides managed hosting for your agents.
@@ -275,14 +350,20 @@ See [Mastra Deployment Docs](https://mastra.ai/docs/deployment/overview) for det
 **Webhook not receiving events:**
 - Verify ngrok is running (for local testing)
 - Check webhook secret matches
-- Ensure PR events are selected in webhook settings
+- Ensure "Pull requests" events are selected in webhook settings (not just "Push events")
+
+**Webhook received but agent not reviewing:**
+- Check server logs for `[Webhook]` and `[fetchPRContext]` messages
+- Verify the event is `pull_request` (not `push`)
+- Ensure PR action is `opened`, `synchronize`, or `reopened`
 
 ### Debug Mode
 
 The workflow includes debug logging. Check console output for:
+- `[Webhook]` - Webhook reception and processing
 - `[fetchPRContext]` - PR data fetching
 - `[performReview]` - Agent review generation
-- `[postReview]` - GitHub posting
+- `[postReview]` - GitHub posting and Telegram notification
 
 ## API Reference
 
@@ -307,7 +388,7 @@ Manually trigger a review for a PR.
     "success": true,
     "prUrl": "string",
     "reviewPosted": true,
-    "notificationSent": false,
+    "notificationSent": true,
     "message": "string"
   }
 }
@@ -319,6 +400,17 @@ Receives GitHub webhook events. Automatically processes PR events:
 - `opened`
 - `synchronize`
 - `reopened`
+
+## Scripts
+
+| Command | Description |
+|---------|-------------|
+| `npm run dev` | Start development server with auto-reload |
+| `npm run start` | Start production server |
+| `npm run build` | Build TypeScript |
+| `npm run test` | Run tests |
+| `npm run test:tools` | Test tools individually |
+| `npm run eval` | Run evaluation system |
 
 ## License
 
