@@ -38,8 +38,8 @@ export const getPullRequestFiles = createTool({
     files: z.array(PRFileSchema),
     totalCount: z.number(),
   }),
-  execute: async ({ context }) => {
-    const { owner, repo, pullNumber } = context;
+  execute: async (inputData) => {
+    const { owner, repo, pullNumber } = inputData;
     const octokit = getOctokit();
 
     const response = await octokit.rest.pulls.listFiles({
@@ -80,8 +80,8 @@ export const getPullRequestDiff = createTool({
   outputSchema: z.object({
     diff: z.string(),
   }),
-  execute: async ({ context }) => {
-    const { owner, repo, pullNumber } = context;
+  execute: async (inputData) => {
+    const { owner, repo, pullNumber } = inputData;
     const octokit = getOctokit();
 
     const response = await octokit.rest.pulls.get({
@@ -124,8 +124,8 @@ export const createPullRequestReview = createTool({
     reviewId: z.number().optional(),
     message: z.string(),
   }),
-  execute: async ({ context }) => {
-    const { owner, repo, pullNumber, body, event } = context;
+  execute: async (inputData) => {
+    const { owner, repo, pullNumber, body, event } = inputData;
     const octokit = getOctokit();
 
     try {

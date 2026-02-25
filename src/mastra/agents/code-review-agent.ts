@@ -45,6 +45,43 @@ For new files:
 
 ### 3. Review Checklist
 
+**Syntax Errors (CRITICAL - Check First)**
+Before reviewing logic or best practices, verify the code is syntactically correct:
+
+1. **Braces & Brackets Balance**
+   - Every opening { must have a closing }
+   - Every opening ( must have a closing )
+   - Every opening [ must have a closing ]
+   - Check nested structures carefully (functions inside objects, callbacks, etc.)
+   - Verify switch statements have proper case/end structure
+
+2. **Semicolons**
+   - For loops MUST use semicolons: for (init; condition; update)
+   - Statement terminators where required
+   - Watch for accidental commas where semicolons belong
+
+3. **Commas**
+   - Object properties must be comma-separated (trailing comma OK in ES6+)
+   - Array elements must be comma-separated
+   - Function parameters must be comma-separated
+   - No trailing commas in function parameter lists (before ES2017)
+
+4. **Parentheses**
+   - if/while/for/switch conditions must be wrapped in ()
+   - Function declarations and calls must have proper ()
+   - Arrow functions: (params) => {} or param => {}
+   - Check for missing parentheses in nested function calls
+
+5. **String Quotes**
+   - Matching opening and closing quotes (' ', " ", \` \`)
+   - Proper escaping of quotes inside strings
+   - Template literal syntax for backticks
+
+6. **Operators & Keywords**
+   - Proper use of => in arrow functions
+   - Correct function/const/let/var declarations
+   - No missing operators between expressions
+
 **Security**
 - SQL injection, XSS, CSRF vulnerabilities
 - Authentication and authorization issues
@@ -84,7 +121,9 @@ Structure your review as:
 
 **Summary**: Brief overview of the changes and overall impression
 
-**Critical Issues**: Must-fix problems (security, bugs, breaking changes)
+**Critical Issues**: Must-fix problems (SYNTAX ERRORS FIRST, then security, bugs, breaking changes)
+- Always list syntax errors at the top - these prevent code from running
+- Include exact file:line references
 
 **Suggestions**: Recommended improvements (performance, readability)
 
@@ -100,6 +139,12 @@ When you complete your review, output a structured review in this format:
 [2-3 sentence overview]
 
 ## Critical Issues
+### Syntax Errors (BLOCKING)
+- [file:line] Missing closing brace in function X
+- [file:line] Missing semicolon in for loop
+- [file:line] Unbalanced parentheses in if statement
+
+### Other Critical Issues
 - [Issue 1 with file:line reference]
 - [Issue 2 with file:line reference]
 

@@ -42,8 +42,8 @@ export const getFileContent = createTool({
     path: z.string(),
     sha: z.string(),
   }),
-  execute: async ({ context }) => {
-    const { owner, repo, path, ref } = context;
+  execute: async (inputData) => {
+    const { owner, repo, path, ref } = inputData;
     const octokit = getOctokit();
 
     const response = await octokit.rest.repos.getContent({
@@ -96,8 +96,8 @@ export const getFileAtPRHead = createTool({
     exists: z.boolean(),
     headRef: z.string(),
   }),
-  execute: async ({ context }) => {
-    const { owner, repo, path, pullNumber } = context;
+  execute: async (inputData) => {
+    const { owner, repo, path, pullNumber } = inputData;
     const octokit = getOctokit();
 
     // First, get the PR to find the head ref
@@ -165,8 +165,8 @@ export const getFileAtBaseBranch = createTool({
     exists: z.boolean(),
     baseRef: z.string(),
   }),
-  execute: async ({ context }) => {
-    const { owner, repo, path, pullNumber } = context;
+  execute: async (inputData) => {
+    const { owner, repo, path, pullNumber } = inputData;
     const octokit = getOctokit();
 
     // First, get the PR to find the base ref
@@ -239,8 +239,8 @@ export const getDirectoryContents = createTool({
     path: z.string(),
     totalCount: z.number(),
   }),
-  execute: async ({ context }) => {
-    const { owner, repo, path = "", ref } = context;
+  execute: async (inputData) => {
+    const { owner, repo, path = "", ref } = inputData;
     const octokit = getOctokit();
 
     const response = await octokit.rest.repos.getContent({
