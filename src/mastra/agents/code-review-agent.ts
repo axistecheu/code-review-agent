@@ -1,3 +1,7 @@
+// Load environment variables first (before any other imports)
+import dotenv from "dotenv";
+dotenv.config();
+
 import { Agent } from "@mastra/core/agent";
 import { createOllama } from "ollama-ai-provider";
 import {
@@ -119,21 +123,23 @@ When you complete your review, output a structured review in this format:
 - If you need more context about a file, read it using the available tools
 `;
 
-// Get model configuration from environment
+// Get model configuration using ollama-ai-provider
+// Mastra supports AI SDK provider modules directly
+// This allows us to use local Ollama with full tool support
 const getOllamaModel = () => {
-  const modelName = process.env.OLLAMA_MODEL || "llama3.2-vision:latest";
-  // The ollama-ai-provider expects the base URL to end with /api
-  // OLLAMA_BASE_URL is typically http://host:11434, so we add /api
-  const ollamaBase = process.env.OLLAMA_BASE_URL || "http://localhost:11434";
-  const baseURL = ollamaBase.replace(/\/$/, "") + "/api";
+  const modelName = process.env.OLLAMA_MODEL || "qwen3:8b";
+  const ollamaBaseUrl = process.env.OLLAMA_BASE_URL || "http://localhost:11434";
 
   console.log(`[Agent] Using Ollama model: ${modelName}`);
-  console.log(`[Agent] Ollama baseURL: ${baseURL}`);
+  console.log(`[Agent] Ollama base URL: ${ollamaBaseUrl}`);
 
-  const ollamaProvider = createOllama({ baseURL });
-  return ollamaProvider(modelName, {
-    numCtx: 32768, // Large context window for full file review
+  // Create Ollama provider with custom base URL
+  // The ollama-ai-provider is compatible with Mastra through AI SDK
+  const ollama = createOllama({
+    baseURL: `${ollamaBaseUrl}/api`,
   });
+
+  return ollama(modelName);
 };
 
 // Create the code review agent

@@ -182,17 +182,18 @@ ${diff}
 Please analyze these changes thoroughly. Use your tools to read the full content of any files you need to understand the context. Provide a comprehensive review following your guidelines.`;
 
     // Generate the review
-    console.log("[performReview] Calling agent.generate()...");
+    console.log("[performReview] Calling agent.generateLegacy()...");
     console.log("[performReview] Prompt length:", prompt.length, "characters");
 
     let reviewContent: string;
     try {
-      // Use generateLegacy for AI SDK v4 compatibility with ollama-ai-provider
+      // Use generateLegacy() for AI SDK v4 models (like ollama-ai-provider)
+      // Mastra's generate() requires AI SDK v5 models
       const result = await agent.generateLegacy([{ role: "user", content: prompt }]);
-      console.log("[performReview] Agent generate completed, result text length:", result.text?.length || 0);
+      console.log("[performReview] Agent generateLegacy completed, result text length:", result.text?.length || 0);
       reviewContent = result.text;
     } catch (error) {
-      console.error("[performReview] ERROR during agent.generate():", error);
+      console.error("[performReview] ERROR during agent.generateLegacy():", error);
       throw error;
     }
 
