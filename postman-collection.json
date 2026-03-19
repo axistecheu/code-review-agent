@@ -1,0 +1,455 @@
+{
+  "info": {
+    "name": "Code Review Agent API",
+    "description": "Postman collection for testing the Mastra code review agent",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:4111",
+      "type": "string"
+    },
+    {
+      "key": "github_owner",
+      "value": "your-username",
+      "type": "string"
+    },
+    {
+      "key": "github_repo",
+      "value": "your-repo",
+      "type": "string"
+    },
+    {
+      "key": "pr_number",
+      "value": "123",
+      "type": "string"
+    },
+    {
+      "key": "webhook_secret",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health Check",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/health",
+          "host": ["{{base_url}}"],
+          "path": ["health"]
+        },
+        "description": "Quick health check to verify the server is running"
+      },
+      "response": []
+    },
+    {
+      "name": "Trigger Review - Manual",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"owner\": \"{{github_owner}}\",\n  \"repo\": \"{{github_repo}}\",\n  \"pullNumber\": {{pr_number}}\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/trigger-review",
+          "host": ["{{base_url}}"],
+          "path": ["trigger-review"]
+        },
+        "description": "Manually trigger a code review for a specific PR. Fetches PR details from GitHub and runs the review workflow."
+      },
+      "response": [
+        {
+          "name": "Success Response",
+          "originalRequest": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"owner\": \"octocat\",\n  \"repo\": \"Hello-World\",\n  \"pullNumber\": 42\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/trigger-review",
+              "host": ["{{base_url}}"],
+              "path": ["trigger-review"]
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "_postman_previewlanguage": "json",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": "{\n  \"message\": \"Review completed\",\n  \"result\": {\n    \"reviewPosted\": true,\n    \"commentCount\": 5,\n    \"summary\": \"Code review completed successfully\"\n  }\n}"
+        },
+        {
+          "name": "Error - Missing Fields",
+          "originalRequest": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"owner\": \"octocat\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/trigger-review",
+              "host": ["{{base_url}}"],
+              "path": ["trigger-review"]
+            }
+          },
+          "status": "Bad Request",
+          "code": 400,
+          "_postman_previewlanguage": "json",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": "{\n  \"error\": \"Missing required fields: owner, repo, pullNumber\"\n}"
+        }
+      ]
+    },
+    {
+      "name": "Webhook - Ping Event",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "X-GitHub-Event",
+            "value": "ping"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"zen\": \"Keep it logically awesome.\",\n  \"hook_id\": 123456\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/webhook/github",
+          "host": ["{{base_url}}"],
+          "path": ["webhook", "github"]
+        },
+        "description": "GitHub webhook ping event - used to verify webhook configuration"
+      },
+      "response": [
+        {
+          "name": "Pong Response",
+          "originalRequest": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-GitHub-Event",
+                "value": "ping"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"zen\": \"Keep it logically awesome.\",\n  \"hook_id\": 123456\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/webhook/github",
+              "host": ["{{base_url}}"],
+              "path": ["webhook", "github"]
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "_postman_previewlanguage": "json",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": "{\n  \"message\": \"pong\"\n}"
+        }
+      ]
+    },
+    {
+      "name": "Webhook - PR Opened",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "X-GitHub-Event",
+            "value": "pull_request"
+          },
+          {
+            "key": "X-Hub-Signature-256",
+            "value": "{{webhook_signature}}",
+            "description": "HMAC SHA256 signature (only required if GITHUB_WEBHOOK_SECRET is set)"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"action\": \"opened\",\n  \"number\": {{pr_number}},\n  \"repository\": {\n    \"id\": 123456,\n    \"name\": \"{{github_repo}}\",\n    \"full_name\": \"{{github_owner}}/{{github_repo}}\",\n    \"owner\": {\n      \"login\": \"{{github_owner}}\"\n    }\n  },\n  \"pull_request\": {\n    \"number\": {{pr_number}},\n    \"title\": \"Add new feature\",\n    \"body\": \"This PR adds a new feature\",\n    \"html_url\": \"https://github.com/{{github_owner}}/{{github_repo}}/pull/{{pr_number}}\",\n    \"user\": {\n      \"login\": \"developer\"\n    },\n    \"base\": {\n      \"ref\": \"main\"\n    },\n    \"head\": {\n      \"ref\": \"feature-branch\"\n    },\n    \"state\": \"open\"\n  }\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/webhook/github",
+          "host": ["{{base_url}}"],
+          "path": ["webhook", "github"]
+        },
+        "description": "Simulates a GitHub webhook for a PR opened event. Triggers the full review workflow."
+      },
+      "response": [
+        {
+          "name": "Success - Review Completed",
+          "originalRequest": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-GitHub-Event",
+                "value": "pull_request"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"opened\",\n  \"repository\": { \"owner\": { \"login\": \"octocat\" }, \"name\": \"Hello-World\" },\n  \"pull_request\": { \"number\": 42, \"title\": \"Add feature\", \"html_url\": \"https://github.com/octocat/Hello-World/pull/42\", \"user\": { \"login\": \"developer\" }, \"base\": { \"ref\": \"main\" }, \"head\": { \"ref\": \"feature\" } }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/webhook/github",
+              "host": ["{{base_url}}"],
+              "path": ["webhook", "github"]
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "_postman_previewlanguage": "json",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": "{\n  \"message\": \"Review workflow completed\",\n  \"result\": {\n    \"reviewPosted\": true,\n    \"commentCount\": 3\n  }\n}"
+        }
+      ]
+    },
+    {
+      "name": "Webhook - PR Synchronize",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "X-GitHub-Event",
+            "value": "pull_request"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"action\": \"synchronize\",\n  \"number\": {{pr_number}},\n  \"repository\": {\n    \"id\": 123456,\n    \"name\": \"{{github_repo}}\",\n    \"owner\": {\n      \"login\": \"{{github_owner}}\"\n    }\n  },\n  \"pull_request\": {\n    \"number\": {{pr_number}},\n    \"title\": \"Add new feature\",\n    \"html_url\": \"https://github.com/{{github_owner}}/{{github_repo}}/pull/{{pr_number}}\",\n    \"user\": {\n      \"login\": \"developer\"\n    },\n    \"base\": {\n      \"ref\": \"main\"\n    },\n    \"head\": {\n      \"ref\": \"feature-branch\"\n    }\n  }\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/webhook/github",
+          "host": ["{{base_url}}"],
+          "path": ["webhook", "github"]
+        },
+        "description": "Simulates a PR synchronize event (new commits pushed). Triggers re-review."
+      },
+      "response": []
+    },
+    {
+      "name": "Webhook - PR Reopened",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "X-GitHub-Event",
+            "value": "pull_request"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"action\": \"reopened\",\n  \"number\": {{pr_number}},\n  \"repository\": {\n    \"name\": \"{{github_repo}}\",\n    \"owner\": {\n      \"login\": \"{{github_owner}}\"\n    }\n  },\n  \"pull_request\": {\n    \"number\": {{pr_number}},\n    \"title\": \"Add new feature\",\n    \"html_url\": \"https://github.com/{{github_owner}}/{{github_repo}}/pull/{{pr_number}}\",\n    \"user\": {\n      \"login\": \"developer\"\n    },\n    \"base\": {\n      \"ref\": \"main\"\n    },\n    \"head\": {\n      \"ref\": \"feature-branch\"\n    }\n  }\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/webhook/github",
+          "host": ["{{base_url}}"],
+          "path": ["webhook", "github"]
+        },
+        "description": "Simulates a PR reopened event"
+      },
+      "response": []
+    },
+    {
+      "name": "Webhook - Ignored Action",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "X-GitHub-Event",
+            "value": "pull_request"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"action\": \"closed\",\n  \"number\": {{pr_number}},\n  \"repository\": {\n    \"name\": \"{{github_repo}}\",\n    \"owner\": {\n      \"login\": \"{{github_owner}}\"\n    }\n  },\n  \"pull_request\": {\n    \"number\": {{pr_number}},\n    \"title\": \"Add new feature\"\n  }\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/webhook/github",
+          "host": ["{{base_url}}"],
+          "path": ["webhook", "github"]
+        },
+        "description": "Tests that ignored actions (closed, labeled, etc.) are handled correctly"
+      },
+      "response": [
+        {
+          "name": "Ignored Response",
+          "originalRequest": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-GitHub-Event",
+                "value": "pull_request"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"closed\",\n  \"repository\": { \"owner\": { \"login\": \"octocat\" }, \"name\": \"Hello-World\" },\n  \"pull_request\": { \"number\": 42 }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/webhook/github",
+              "host": ["{{base_url}}"],
+              "path": ["webhook", "github"]
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "_postman_previewlanguage": "json",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": "{\n  \"message\": \"Action closed ignored\"\n}"
+        }
+      ]
+    },
+    {
+      "name": "Webhook - Invalid Signature",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "X-GitHub-Event",
+            "value": "pull_request"
+          },
+          {
+            "key": "X-Hub-Signature-256",
+            "value": "sha256=invalid_signature"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"action\": \"opened\",\n  \"repository\": {\n    \"name\": \"{{github_repo}}\",\n    \"owner\": {\n      \"login\": \"{{github_owner}}\"\n    }\n  },\n  \"pull_request\": {\n    \"number\": {{pr_number}},\n    \"title\": \"Test\",\n    \"html_url\": \"https://github.com/{{github_owner}}/{{github_repo}}/pull/{{pr_number}}\",\n    \"user\": { \"login\": \"developer\" },\n    \"base\": { \"ref\": \"main\" },\n    \"head\": { \"ref\": \"feature\" }\n  }\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/webhook/github",
+          "host": ["{{base_url}}"],
+          "path": ["webhook", "github"]
+        },
+        "description": "Tests signature verification - should return 401 if GITHUB_WEBHOOK_SECRET is configured"
+      },
+      "response": [
+        {
+          "name": "Unauthorized Response",
+          "originalRequest": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-GitHub-Event",
+                "value": "pull_request"
+              },
+              {
+                "key": "X-Hub-Signature-256",
+                "value": "sha256=invalid_signature"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"opened\",\n  \"repository\": { \"owner\": { \"login\": \"octocat\" }, \"name\": \"Hello-World\" },\n  \"pull_request\": { \"number\": 42 }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/webhook/github",
+              "host": ["{{base_url}}"],
+              "path": ["webhook", "github"]
+            }
+          },
+          "status": "Unauthorized",
+          "code": 401,
+          "_postman_previewlanguage": "json",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": "{\n  \"error\": \"Invalid signature\"\n}"
+        }
+      ]
+    }
+  ]
+}

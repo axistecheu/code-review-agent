@@ -3,7 +3,7 @@ import dotenv from "dotenv";
 dotenv.config();
 
 import { Agent } from "@mastra/core/agent";
-import { createOllama } from "ollama-ai-provider";
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import {
   getPullRequestFiles,
   getPullRequestDiff,
@@ -168,9 +168,8 @@ When you complete your review, output a structured review in this format:
 - If you need more context about a file, read it using the available tools
 `;
 
-// Get model configuration using ollama-ai-provider
-// Mastra supports AI SDK provider modules directly
-// This allows us to use local Ollama with full tool support
+// Get model configuration using @ai-sdk/openai-compatible
+// This provides AI SDK v5 compatibility for Ollama with full tool support
 const getOllamaModel = () => {
   const modelName = process.env.OLLAMA_MODEL || "qwen3:8b";
   const ollamaBaseUrl = process.env.OLLAMA_BASE_URL || "http://localhost:11434";
@@ -178,10 +177,11 @@ const getOllamaModel = () => {
   console.log(`[Agent] Using Ollama model: ${modelName}`);
   console.log(`[Agent] Ollama base URL: ${ollamaBaseUrl}`);
 
-  // Create Ollama provider with custom base URL
-  // The ollama-ai-provider is compatible with Mastra through AI SDK
-  const ollama = createOllama({
-    baseURL: `${ollamaBaseUrl}/api`,
+  // Create OpenAI-compatible provider pointing to Ollama
+  // Ollama's OpenAI-compatible API is at /v1 endpoint
+  const ollama = createOpenAICompatible({
+    name: "ollama",
+    baseURL: `${ollamaBaseUrl}/v1`,
   });
 
   return ollama(modelName);

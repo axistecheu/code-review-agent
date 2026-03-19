@@ -10,11 +10,9 @@ See [Mastra Skills section](#mastra-skills) for loading instructions.
 
 ## Project Overview
 
-This is a **Mastra** project written in TypeScript. Mastra is a framework for building AI-powered applications and agents with a modern TypeScript stack.
+This is a **Mastra** project written in TypeScript - an AI-powered code review agent that reviews GitHub pull requests using Ollama LLMs with full repository context access.
 
 ## Commands
-
-Use these commands to interact with the project.
 
 ### Installation
 
@@ -24,62 +22,199 @@ npm install
 
 ### Development
 
-Start the Mastra Studio at localhost:4111 by running the `dev` script:
-
 ```bash
-npm run dev
+npm run dev          # Start with auto-reload on port 4111
+npm run start        # Production mode (no reload)
 ```
 
 ### Build
 
-In order to build a production-ready server, run the `build` script:
+```bash
+npm run build        # TypeScript compilation to ./dist
+```
+
+### Testing
 
 ```bash
-npm run build
+npm run test         # Run main test suite (src/test.ts)
+npm run test:tools   # Test tools individually (src/test-tools.ts)
+npm run eval         # Run evaluation system (src/evals/code-review-eval.ts)
 ```
+
+**Running a single test:** This project uses tsx for running TypeScript directly. To run a specific test file:
+
+```bash
+npx tsx src/path/to/test-file.ts
+```
+
+## Code Style Guidelines
+
+### Imports
+
+- **Load environment variables FIRST** before any other imports:
+  ```typescript
+  import dotenv from "dotenv";
+  dotenv.config();
+  // Then other imports...
+  ```
+
+- Use ES module syntax with `.js` extensions for local imports:
+  ```typescript
+  import { something } from "./module.js";  // Note: .js even for .ts files
+  ```
+
+- Group imports logically: external packages first, then local modules
+
+- Use `verbatimModuleSyntax: true` in tsconfig - import types explicitly:
+  ```typescript
+  import { z } from "zod";
+  import type { SomeType } from "./types.js";
+  ```
+
+### Formatting
+
+- Use double quotes for strings (consistent with Prettier defaults)
+- No trailing commas in function parameter lists
+- Semicolons are required
+- 2-space indentation
+
+### Types and Schemas
+
+- Use **Zod** for all runtime validation and schema definitions
+- Define schemas at the top of files before usage:
+  ```typescript
+  const PRFileSchema = z.object({
+    filename: z.string(),
+    status: z.enum(["added", "modified", "deleted", "renamed"]),
+    additions: z.number(),
+  });
+  ```
+
+- Use `.describe()` for schema field documentation:
+  ```typescript
+  owner: z.string().describe("Repository owner (username or organization)")
+  ```
+
+- Export schemas for reuse: `export { PRFileSchema };`
+
+### Naming Conventions
+
+- **Files:** kebab-case (e.g., `github-tools.ts`, `pr-review-workflow.ts`)
+- **Variables/Functions:** camelCase (e.g., `getPullRequestFiles`, `prTitle`)
+- **Constants:** UPPER_SNAKE_CASE for env vars, camelCase for others
+- **Schemas:** PascalCase with `Schema` suffix (e.g., `WebhookPayloadSchema`)
+- **Tools/Agents:** camelCase for exports (e.g., `codeReviewAgent`, `getPullRequestFiles`)
+- **Tool IDs:** kebab-case (e.g., `"get-pull-request-files"`)
+
+### Error Handling
+
+- Always check for required environment variables at function start:
+  ```typescript
+  const token = process.env.GITHUB_TOKEN;
+  if (!token) {
+    throw new Error("GITHUB_TOKEN environment variable is required");
+  }
+  ```
+
+- Use try/catch for async operations, return structured error responses:
+  ```typescript
+  try {
+    // async operation
+    return { success: true, data };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    return { success: false, message: `Failed: ${errorMessage}` };
+  }
+  ```
+
+- Log errors with context: `console.error("[Context] ERROR:", error);`
+
+### Logging
+
+- Use bracketed context prefixes for log messages:
+  ```typescript
+  console.log("[fetchPRContext] Fetching PR files...");
+  console.error("[performReview] ERROR during agent.generateLegacy():", error);
+  ```
+
+### Mastra-Specific Patterns
+
+- **Tools:** Use `createTool` from `@mastra/core/tools` with Zod schemas:
+  ```typescript
+  export const myTool = createTool({
+    id: "my-tool",
+    description: "Tool description",
+    inputSchema: z.object({ ... }),
+    outputSchema: z.object({ ... }),
+    execute: async (inputData) => { ... },
+  });
+  ```
+
+- **Agents:** Use `Agent` from `@mastra/core/agent`:
+  ```typescript
+  export const myAgent = new Agent({
+    id: "my-agent",
+    name: "My Agent",
+    instructions: "...",
+    model: getModel(),
+    tools: { tool1, tool2 },
+  });
+  ```
+
+- **Workflows:** Use `createWorkflow` and `createStep` from `@mastra/core/workflows`:
+  ```typescript
+  export const myWorkflow = createWorkflow({
+    id: "my-workflow",
+    inputSchema: InputSchema,
+    outputSchema: OutputSchema,
+  })
+    .then(step1)
+    .then(step2)
+    .commit();
+  ```
+
+- **Ollama models:** Use `generateLegacy()` for AI SDK v4 compatibility:
+  ```typescript
+  const result = await agent.generateLegacy([{ role: "user", content: prompt }]);
+  ```
+
+### Comments
+
+- Avoid unnecessary comments - code should be self-documenting
+- Add comments for:
+  - Environment variable loading (must be first)
+  - Non-obvious business logic
+  - Workarounds or compatibility notes
+  - Export grouping headers (e.g., `// GitHub API tools`)
 
 ## Project Structure
 
-Folders organize your agent's resources, like agents, tools, and workflows.
+| Path | Description |
+|------|-------------|
+| `src/index.ts` | Express webhook server entry point |
+| `src/mastra/index.ts` | Mastra configuration and exports |
+| `src/mastra/agents/` | Agent definitions |
+| `src/mastra/tools/` | Tool definitions (github, file, telegram) |
+| `src/mastra/workflows/` | Multi-step workflow definitions |
+| `src/evals/` | Evaluation system for review quality |
 
-| Folder                 | Description                                                                                                                              |
-| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/mastra`           | Entry point for all Mastra-related code and configuration.                                                                               |
-| `src/mastra/agents`    | Define and configure your agents - their behavior, goals, and tools.                                                                     |
-| `src/mastra/workflows` | Define multi-step workflows that orchestrate agents and tools together.                                                                  |
-| `src/mastra/tools`     | Create reusable tools that your agents can call                                                                                          |
-| `src/mastra/mcp`       | (Optional) Implement custom MCP servers to share your tools with external agents                                                         |
-| `src/mastra/scorers`   | (Optional) Define scorers for evaluating agent performance over time                                                                     |
-| `src/mastra/public`    | (Optional) Contents are copied into the `.build/output` directory during the build process, making them available for serving at runtime |
+## Environment Variables
 
-### Top-level files
+Required:
+- `GITHUB_TOKEN` - GitHub PAT with `repo` scope
+- `OLLAMA_BASE_URL` - Ollama server URL (default: `http://localhost:11434`)
+- `OLLAMA_MODEL` - Model name (default: `qwen3:8b`)
 
-Top-level files define how your Mastra project is configured, built, and connected to its environment.
-
-| File                  | Description                                                                                                       |
-| --------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `src/mastra/index.ts` | Central entry point where you configure and initialize Mastra.                                                    |
-| `.env.example`        | Template for environment variables - copy and rename to `.env` to add your secret [model provider](/models) keys. |
-| `package.json`        | Defines project metadata, dependencies, and available npm scripts.                                                |
-| `tsconfig.json`       | Configures TypeScript options such as path aliases, compiler settings, and build output.                          |
+Optional:
+- `GITHUB_WEBHOOK_SECRET` - Webhook signature verification
+- `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` - Notifications
+- `PORT` - Server port (default: `4111`)
 
 ## Mastra Skills
 
-Skills are modular capabilities that extend agent functionalities. They provide pre-built tools, integrations, and workflows that agents can leverage to accomplish tasks more effectively.
-
-This project has skills installed for the following agents:
-
-- Claude Code
-
-### Loading Skills
-
 1. **Load the Mastra skill FIRST** - Use `/mastra` command or Skill tool
-2. **Never rely on cached knowledge** - Mastra APIs change frequently between versions
+2. **Never rely on cached knowledge** - Mastra APIs change frequently
 3. **Always verify against current docs** - The skill provides up-to-date documentation
-
-**Why this matters:** Your training data about Mastra is likely outdated. Constructor signatures, APIs, and patterns change rapidly. Loading the skill ensures you use current, correct APIs.
-
-Skills are automatically available to agents in your project once installed. Agents can access and use these skills without additional configuration.
 
 ## Resources
 

@@ -187,13 +187,15 @@ Please analyze these changes thoroughly. Use your tools to read the full content
 
     let reviewContent: string;
     try {
-      // Use generateLegacy() for AI SDK v4 models (like ollama-ai-provider)
-      // Mastra's generate() requires AI SDK v5 models
-      const result = await agent.generateLegacy([{ role: "user", content: prompt }]);
-      console.log("[performReview] Agent generateLegacy completed, result text length:", result.text?.length || 0);
+      // Use generate() with AI SDK v5 model for full tool support
+      // The agent will automatically execute tools and continue until done
+      const result = await agent.generate([{ role: "user", content: prompt }], {
+        maxSteps: 20, // Allow multiple steps for tool calls
+      });
+      console.log("[performReview] Agent generate completed, result text length:", result.text?.length || 0);
       reviewContent = result.text;
     } catch (error) {
-      console.error("[performReview] ERROR during agent.generateLegacy():", error);
+      console.error("[performReview] ERROR during agent.generate():", error);
       throw error;
     }
 

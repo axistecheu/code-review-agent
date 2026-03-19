@@ -12,6 +12,7 @@
     "eval": "tsx src/evals/code-review-eval.ts"
   },
   "dependencies": {
+    "@ai-sdk/openai-compatible": "^2.0.35",
     "@mastra/core": "^1.7.0",
     "@mastra/evals": "^1.1.2",
     "@mastra/express": "^1.1.6",
